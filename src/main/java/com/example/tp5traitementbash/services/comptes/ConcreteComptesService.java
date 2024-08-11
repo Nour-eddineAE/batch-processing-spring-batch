@@ -11,12 +11,9 @@ public class ConcreteComptesService implements AbsComptesService {
     private CompteRepository compteRepository;
     @Override
     public Compte getCompte(Long idCompte) {
-        var compte = compteRepository.findById(idCompte).orElse(null);
 
-        if(compte == null)
-            throw new RuntimeException("Compte avec id'" + idCompte +  "'non trouvé");
-
-        return compte;
+        return compteRepository.findById(idCompte)
+                .orElseThrow(() -> new RuntimeException("Compte avec id '" + idCompte +  "' non trouvé"));
     }
 
     @Override

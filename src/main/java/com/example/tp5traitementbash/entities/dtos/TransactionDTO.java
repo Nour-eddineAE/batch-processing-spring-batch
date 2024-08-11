@@ -1,6 +1,5 @@
-package com.example.tp5traitementbash.entities;
+package com.example.tp5traitementbash.entities.dtos;
 
-import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -12,14 +11,9 @@ import java.util.Date;
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-@Entity
-@Table(name = "transactions")
-public class Transaction {
-    @Id
+public class TransactionDTO {
     private Long transactionId;
     private double amount;
-    private Date debitDate;
     private Date transactionDate;
-    @ManyToOne(cascade = CascadeType.ALL)
-    private Account account;
+    private Long accountId;
 }

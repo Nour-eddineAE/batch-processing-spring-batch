@@ -1,135 +1,122 @@
 package com.example.tp5traitementbash.batch;
 
-import com.example.tp5traitementbash.dtos.TransactionDTO;
+
+import com.example.tp5traitementbash.batch.readers.TransactionReaderLoggingDecorator;
+import com.example.tp5traitementbash.entities.dtos.TransactionDTO;
 import com.example.tp5traitementbash.entities.Transaction;
-import com.example.tp5traitementbash.services.comptes.AbsComptesService;
-import com.example.tp5traitementbash.services.transactions.AbsTransactionService;
-import jakarta.transaction.Transactional;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
+import org.springframework.batch.core.job.builder.FlowBuilder;
 import org.springframework.batch.core.job.builder.JobBuilder;
+import org.springframework.batch.core.job.flow.Flow;
+import org.springframework.batch.core.job.flow.support.SimpleFlow;
 import org.springframework.batch.core.launch.JobLauncher;
 import org.springframework.batch.core.launch.support.TaskExecutorJobLauncher;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.repository.support.JobRepositoryFactoryBean;
 import org.springframework.batch.core.step.builder.StepBuilder;
-import org.springframework.batch.item.Chunk;
 import org.springframework.batch.item.ItemProcessor;
-import org.springframework.batch.item.ItemReader;
+import org.springframework.batch.item.ItemStreamReader;
 import org.springframework.batch.item.ItemWriter;
-import org.springframework.batch.item.file.FlatFileItemReader;
-import org.springframework.batch.item.file.LineMapper;
-import org.springframework.batch.item.file.mapping.BeanWrapperFieldSetMapper;
-import org.springframework.batch.item.file.mapping.DefaultLineMapper;
-import org.springframework.batch.item.file.mapping.FieldSetMapper;
-import org.springframework.batch.item.file.transform.DelimitedLineTokenizer;
-import org.springframework.batch.item.file.transform.FieldSet;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.batch.item.support.CompositeItemProcessor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.io.FileSystemResource;
-import org.springframework.core.io.Resource;
+import org.springframework.core.task.SimpleAsyncTaskExecutor;
 import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.validation.BindException;
 
 import javax.sql.DataSource;
-import java.util.Date;
+import java.util.Arrays;
 
 @Configuration
-//@EnableBatchProcessing
 public class BatchConfig {
+    private final PlatformTransactionManager transactionManager;
+    private final DataSource dataSource;
+    private final ItemStreamReader<TransactionDTO> transactionCSVReader;
+    private final ItemStreamReader<TransactionDTO> transactionXMLReader;
+    private final ItemProcessor<TransactionDTO, Transaction> transactionModelProcessor;
+    private final ItemProcessor<Transaction, Transaction> transactionDebitProcessor;
+    private final ItemWriter<Transaction> transactionWriter;
 
-    @Autowired
-    private PlatformTransactionManager transactionManager;
-    @Autowired
-    private DataSource dataSource;
-    @Autowired
-    private AbsComptesService comptesService;
-    @Autowired
-    private AbsTransactionService transactionService;
-
-    @Bean
-    public Resource inputFileResource() {
-        return new FileSystemResource("src\\main\\resources\\transactions.csv");
+    public BatchConfig(
+            PlatformTransactionManager transactionManager,
+            DataSource dataSource,
+            @Qualifier("CSVTransactionReader") ItemStreamReader<TransactionDTO> transactionCSVReader,
+            @Qualifier("XMLTransactionReader") ItemStreamReader<TransactionDTO> transactionXMLReader,
+            ItemProcessor<TransactionDTO, Transaction> transactionModelProcessor,
+            ItemProcessor<Transaction, Transaction> transactionDebitProcessor,
+            ItemWriter<Transaction> transactionWriter) {
+        this.transactionManager = transactionManager;
+        this.dataSource = dataSource;
+        this.transactionCSVReader = transactionCSVReader;
+        this.transactionXMLReader = transactionXMLReader;
+        this.transactionModelProcessor = transactionModelProcessor;
+        this.transactionDebitProcessor = transactionDebitProcessor;
+        this.transactionWriter = transactionWriter;
     }
 
     @Bean
-    public LineMapper<TransactionDTO> lineMapper() {
-        DefaultLineMapper<TransactionDTO> defaultLineMapper = new DefaultLineMapper<>();
-
-        DelimitedLineTokenizer lineTokenizer = new DelimitedLineTokenizer();
-        lineTokenizer.setDelimiter(",");
-        lineTokenizer.setStrict(false);
-        lineTokenizer.setNames("idTransaction","idCompte","montant","dateTransaction");
-
-        defaultLineMapper.setLineTokenizer(lineTokenizer);
-
-        defaultLineMapper.setFieldSetMapper(fieldSet -> {
-            TransactionDTO transactionDTO = new TransactionDTO();
-
-            transactionDTO.setIdTransaction(fieldSet.readLong("idTransaction"));
-            transactionDTO.setIdCompte(fieldSet.readLong("idCompte"));
-            transactionDTO.setMontant(fieldSet.readDouble("montant"));
-            transactionDTO.setDateTransaction(fieldSet.readDate("dateTransaction"));
-
-            return transactionDTO;
-        });
-
-        return defaultLineMapper;
+    public ItemProcessor<TransactionDTO, Transaction> compositeItemProcessor() {
+        CompositeItemProcessor<TransactionDTO, Transaction> compositeItemProcessor = new CompositeItemProcessor<>();
+        compositeItemProcessor.setDelegates(Arrays.asList(this.transactionModelProcessor, this.transactionDebitProcessor));
+        return compositeItemProcessor;
     }
 
     @Bean
-    public ItemReader<? extends TransactionDTO> reader() {
-        FlatFileItemReader<TransactionDTO> reader = new FlatFileItemReader<TransactionDTO>();
-        reader.setResource(inputFileResource());
-        reader.setLineMapper(lineMapper());
-        reader.setLinesToSkip(1);
-
-        return reader;
+    public Step step1() throws Exception {
+        return new StepBuilder("importCSVTransaction", jobRepository())
+                .<TransactionDTO, Transaction>chunk(10, this.transactionManager)
+                .reader(new TransactionReaderLoggingDecorator(this.transactionCSVReader))
+                .processor(compositeItemProcessor())
+                .writer(this.transactionWriter)
+                .build();
     }
 
     @Bean
-    public ItemProcessor<TransactionDTO, Transaction> itemProcessor() {
-        return new ItemProcessor<TransactionDTO, Transaction>() {
-            @Override
-            public Transaction process(TransactionDTO item) throws Exception {
-                var transaction = new Transaction();
-                transaction.setIdTransaction(item.getIdTransaction());
-                transaction.setMontant(item.getMontant());
-                transaction.setDateTransaction(item.getDateTransaction());
-                transaction.setDateDebit(new Date());
-
-                var compte = comptesService.getCompte(item.getIdCompte());
-                transaction.setCompte(compte);
-
-                return transaction;
-            }
-        };
+    public Step step2() throws Exception {
+        return new StepBuilder("importXMLTransaction", jobRepository())
+                .<TransactionDTO, Transaction>chunk(10, this.transactionManager)
+                .reader(new TransactionReaderLoggingDecorator( this.transactionXMLReader))
+                .processor(compositeItemProcessor())
+                .writer(this.transactionWriter)
+                .build();
     }
 
-    ;
+    @Bean
+    public Flow flow1() throws Exception {
+        return new FlowBuilder<Flow>("flow1")
+                .start(step1())
+                .build();
+    }
 
     @Bean
-    public ItemWriter<Transaction> writer() {
-        return new ItemWriter<Transaction>() {
-            @Override
-            @Transactional
-            public void write(Chunk<? extends Transaction> chunk) throws Exception {
-                for (var transaction : chunk) {
-                    transactionService.saveTransaction(transaction);
+    public Flow flow2() throws Exception {
+        return new FlowBuilder<Flow>("flow1")
+                .start(step2())
+                .build();
+    }
 
-                    var compte = transaction.getCompte();
-                    comptesService.debiterCompte(compte, transaction.getMontant());
-                }
-            }
-        };
+    @Bean
+    public Flow splitFlow() throws Exception {
+        return new FlowBuilder<SimpleFlow>("splitFlow")
+                .split(new SimpleAsyncTaskExecutor())
+                .add(flow1(), flow2())
+                .build();
+    }
+
+    @Bean(name = "importTransactions")
+    public Job importTransactions() throws Exception {
+        return new JobBuilder("importTransactions", jobRepository())
+                .start(splitFlow())
+                .build()
+                .build();
     }
 
     @Bean(name = "jobRepository")
     public JobRepository jobRepository() throws Exception {
         JobRepositoryFactoryBean factory = new JobRepositoryFactoryBean();
-        factory.setDataSource(dataSource);
-        factory.setTransactionManager(transactionManager);
+        factory.setDataSource(this.dataSource);
+        factory.setTransactionManager(this.transactionManager);
         factory.afterPropertiesSet();
         return factory.getObject();
     }
@@ -140,22 +127,5 @@ public class BatchConfig {
                 = new TaskExecutorJobLauncher();
         jobLauncher.setJobRepository(jobRepository());
         return jobLauncher;
-    }
-
-    @Bean
-    public Step step1() throws Exception {
-        return new StepBuilder("importTransaction", jobRepository())
-                .<TransactionDTO, Transaction>chunk(4, transactionManager)
-                .reader(reader())
-                .processor(itemProcessor())
-                .writer(writer())
-                .build();
-    }
-
-    @Bean(name = "importTransactions")
-    public Job importTransactions() throws Exception {
-        return new JobBuilder("importTransactions", jobRepository())
-                .start(step1())
-                .build();
     }
 }

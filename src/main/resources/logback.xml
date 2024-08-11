@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- * Standard output appender-->
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>
+                %d{dd-MM-yyyy HH:mm:ss.SSS} %magenta([%thread]) %highlight(%-5level) %logger{36}.%M - %msg%n
+            </pattern>
+        </encoder>
+    </appender>
+
+    <!-- * App appender(level=TRACE)-->
+    <appender name="APP_TRACE_FILE" class="ch.qos.logback.core.FileAppender">
+        <file>logs/app-general.log</file>
+        <append>true</append>
+        <immediateFlush>true</immediateFlush>
+        <encoder>
+            <pattern>
+                %d{dd-MM-yyyy hh:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n
+            </pattern>
+        </encoder>
+    </appender>
+
+    <!-- * App appender(level=ERROR)-->
+    <appender name="APP_ERROR_FILE" class="ch.qos.logback.core.FileAppender">
+        <file>logs/app-errors.log</file>
+        <append>true</append>
+        <immediateFlush>true</immediateFlush>
+        <filter class="ch.qos.logback.classic.filter.LevelFilter">
+            <level>ERROR</level>
+            <onMatch>ACCEPT</onMatch>
+            <onMismatch>DENY</onMismatch>
+        </filter>
+        <encoder>
+            <pattern>
+                %d{dd-MM-yyyy hh:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n
+            </pattern>
+        </encoder>
+    </appender>
+
+    <!-- * APP logs-->
+    <logger name="com.example.tp5traitementbash" level="TRACE" additivity="false">
+        <appender-ref ref="STDOUT"/>
+        <appender-ref ref="APP_TRACE_FILE"/>
+        <appender-ref ref="APP_ERROR_FILE"/>
+    </logger>
+
+    <!-- * SPRING LOGS-->
+    <root level="INFO">
+        <appender-ref ref="STDOUT"/>
+        <appender-ref ref="APP_TRACE_FILE"/>
+        <appender-ref ref="APP_ERROR_FILE"/>
+    </root>
+</configuration>

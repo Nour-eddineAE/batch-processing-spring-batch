@@ -1,0 +1,22 @@
+<transactions>
+    <transaction idTransaction="21">
+        <montant>500</montant>
+        <dateTransaction>2023-11-28 14:27:53</dateTransaction>
+        <idCompte>21</idCompte>
+    </transaction>
+    <transaction idTransaction="22">
+        <montant>1000</montant>
+        <dateTransaction>2023-11-28 14:27:53</dateTransaction>
+        <idCompte>22</idCompte>
+    </transaction>
+    <transaction idTransaction="23">
+        <montant>1500</montant>
+        <dateTransaction>2023-11-28 14:27:53</dateTransaction>
+        <idCompte>23</idCompte>
+    </transaction>
+    <transaction idTransaction="24">
+        <montant>2000</montant>
+        <dateTransaction>2023-11-28 14:27:53</dateTransaction>
+        <idCompte>24</idCompte>
+    </transaction>
+</transactions>

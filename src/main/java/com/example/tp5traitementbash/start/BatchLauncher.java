@@ -1,4 +1,4 @@
-package com.example.tp5traitementbash.batch;
+package com.example.tp5traitementbash.start;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.batch.core.Job;
@@ -17,13 +17,9 @@ public class BatchLauncher {
     public void launchBatchJob() {
         try {
             JobParameters parameters = new JobParametersBuilder()
-                    .addLong("startAt", System.currentTimeMillis()).toJobParameters();
+                    .addLong("started-at", System.currentTimeMillis()).toJobParameters();
 
-            JobExecution jobExecution = jobLauncher.run(importTransactionsJob, parameters);
-
-            while(jobExecution.isRunning()){
-                System.out.println(".....");
-            }
+            JobExecution jobExecution = this.jobLauncher.run(this.importTransactionsJob, parameters);
 
             // log or handle execution status
             System.out.println("Job Execution Status: " + jobExecution.getStatus());
